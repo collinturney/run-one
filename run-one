@@ -110,4 +110,32 @@ case "$base" in
 			sleep $backoff
 		done
 	;;
+	run-one-until-cmd-success|run-one-until-cmd-failure)
+		(
+			set +e
+			if flock -xn 9; then
+				backoff=0
+				retries=0
+				while true; do
+					echo "running $@"
+					eval $@ && ret=$?
+
+					if [ "$ret" = 0 ]; then
+						[ "$base" = "run-one-until-cmd-success" ] && break
+					else
+						[ "$base" = "run-one-until-cmd-failure" ] && break
+					fi
+
+					retries=$((retries + 1))
+					backoff=$((retries / 10))
+
+					logger -t "${base}[$$]" "last run returned $ret; sleeping [$backoff] seconds before next run"
+
+					[ $backoff -gt 60 ] && backoff=60
+					sleep $backoff
+				done
+			fi
+		) 9>"$FLAG"
+	;;
+
 esac
